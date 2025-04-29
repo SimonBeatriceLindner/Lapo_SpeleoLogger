@@ -18,19 +18,18 @@
 #include "SPIFlash.h"
 #include "ArduinoJson.h" 
 #include "RTClib.h"
-#include "RTClib.h"
 
 #include "class.h"
 
 //Define Pins
 #define GREEN_LED 2
 #define RED_LED 3
-#define MQ2_PIN A7 
+#define MQ2_PIN A3 
 #define FLASH_CS_PIN 10
 
 // Inizializzazione dei componenti 
 SPIFlash flash(FLASH_CS_PIN);
-RTC_DS1307 rtc;
+RTC_DS3231 rtc;
 
 //Definizione costanti
 const int W25Q128_SectorNumber=4096;
@@ -60,6 +59,7 @@ void setup() {
   dataPoint.fromCompactNotification(test);
   Serial.println(dataPoint.temperature);*/ 
 
+  Serial.println("Flash inizialization begin");
   if (!flash.begin()) {
     Serial.println("ERROR! Flash memory inizialization error");
     blinkError(1);
@@ -68,7 +68,8 @@ void setup() {
   if (!rtc.begin()) {
     blinkError(2); 
   }
-  if (! rtc.isrunning()) {
+  if (! rtc.lostPower()) {
+    Serial.println("RTC has lost power, date time reset");
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
   }
@@ -78,9 +79,9 @@ void setup() {
 
   //Leggi le configurazioni dal primo settore della memoria
   String configsString=readConfigs();
-  Serial.println(configsString);
+  //Serial.println(configsString);
   configs.fromJSON(configsString);
-  Serial.println(configs.toJSON());
+  Serial.println("Configs: " + configs.toJSON());
   //Ottieni la prima cella di memoria libera nell'area riservata ai dati
   firstFreeAdress=getFirstDataFreeAdress();
 
@@ -125,7 +126,7 @@ String readConfigs(){
   bool flag=0;
   for(int i=0 ;flag==0; i++){
     char byteRead = flash.readByte(address + i);
-    Serial.print(byteRead);
+    //Serial.print(byteRead);
     if(byteRead!='#' && byteRead!=0xFF && (byteRead >= 0x20 && byteRead <= 0x7E)) result += byteRead;
     else return result;
   }
