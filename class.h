@@ -62,6 +62,7 @@ class DataPoint{
   short gas1;
   short gas2;
   short temperature;
+  char separator = ';';
 
   DataPoint(DateTime dt, short g1, short g2, short te){
     dateTime = dt;
@@ -89,6 +90,11 @@ class DataPoint{
   DataPoint(){}
 
   String toCompactNotification(){
+    gas1=constrain(gas1, 0, 999);
+    gas2=constrain(gas2, 0, 999);
+    temperature=constrain(temperature, 0, 999);
+
+
     String output = "";
     char dateTimeStr[9];
     sprintf(dateTimeStr, "%04d%02d%02d%02d%02d%02d", dateTime.year(), dateTime.month(), dateTime.day(), dateTime.hour(), dateTime.minute(), dateTime.second());
@@ -98,7 +104,7 @@ class DataPoint{
     sprintf(g2Str, "%03d", gas2);
     char teStr[5];
     sprintf(teStr, "%03d", temperature);
-    output = String(dateTimeStr) + g1Str + g2Str + teStr;
+    output = String(dateTimeStr) +separator+ g1Str +separator+ g2Str +separator+ teStr;
     return output;
   }
 

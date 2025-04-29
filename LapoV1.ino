@@ -6,18 +6,21 @@
     W25Q SCK  = D13
     W25Q MISO = D12
     W25Q MOSI = D11
-    MQ2       = A7
+    SENSOR1   = A7
+    SENSOR2   = A6
+  
+  ERROR blick number:
+    1 - memory inizialization error
+    2 - RTC inizialization error
 */
 
 #include "SPI.h"
 #include "SPIFlash.h"
 #include "ArduinoJson.h" 
 #include "RTClib.h"
-#include "MQ2_LPG.h"
 #include "RTClib.h"
 
 #include "class.h"
-
 
 //Define Pins
 #define GREEN_LED 2
@@ -27,25 +30,12 @@
 
 // Inizializzazione dei componenti 
 SPIFlash flash(FLASH_CS_PIN);
-MQ2Sensor mq2(MQ2_PIN);
 RTC_DS1307 rtc;
 
 //Definizione costanti
 const int W25Q128_SectorNumber=4096;
 const uint32_t W25Q128_FirstDataAddress=0x1000;
 const char SeparatorSimbol = '#';
-
-//MQ-2 settings
-#define RL_Value 100 // 100K ohm
-#define x1_Value 199.150007852152
-#define x2_Value 797.3322752256328
-#define y1_Value 1.664988323698715
-#define y2_Value 0.8990240080541785
-#define x_Value 497.4177875376839
-#define y_Value 1.0876679972710004
-#define Ro_Value 6.02
-#define bitADC_Value 1023.0 // development board adc resolution
-#define Voltage_Value 5.0 //????
 
 //definizione oggetti e variabili globali
 DataPoint dataPoint;
@@ -57,11 +47,12 @@ uint32_t  firstFreeAdress;
 void setup() {
   pinMode(GREEN_LED, OUTPUT);
   pinMode(RED_LED, OUTPUT);
+  pinMode(MQ2_PIN, INPUT);
+
   digitalWrite(RED_LED, HIGH);
 
   Serial.begin(9600);
-  while (!Serial);
-
+  
   /*DateTime dt = {2025, 3, 24, 14, 30, 0};
   DataPoint dataPoint(dt, 300, 299, 8);
   String test= dataPoint.toCompactNotification();
@@ -71,13 +62,11 @@ void setup() {
 
   if (!flash.begin()) {
     Serial.println("ERROR! Flash memory inizialization error");
-    while (1);
+    blinkError(1);
   }
 
-  mq2.begin();
-
   if (!rtc.begin()) {
-    Serial.println("[ERROR] rtc inizialization error");  
+    blinkError(2); 
   }
   if (! rtc.isrunning()) {
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
@@ -102,6 +91,11 @@ void setup() {
     digitalWrite(GREEN_LED, LOW);
     digitalWrite(RED_LED, HIGH);
     delay(500);
+
+    if(Serial && Serial.available()){
+      commandElaboration();
+    }
+
   }
   digitalWrite(RED_LED, LOW);
   digitalWrite(GREEN_LED, HIGH);
@@ -110,18 +104,12 @@ void setup() {
 //#########################  LOOP  #########################
 
 void loop() {
-  Serial.println((uint32_t)firstFreeAdress);
+  //Serial.println((uint32_t)firstFreeAdress);
 
-  calibration();
-  double gasPPM = mq2.readGas()-configs.sensorCalibrationOffset;
+  short gasRead = analogRead(MQ2_PIN);
+  DateTime dt = rtc.now();
   
-  DateTime time = rtc.now();
-  
-  Serial.println(time.timestamp(DateTime::TIMESTAMP_FULL)+" - "+gasPPM);
-
-
-  DateTime dt = {2025, 3, 24, 14, 30, 0};
-  dataPoint.reSet(dt, 300, 299, 8);
+  dataPoint.reSet(dt, gasRead, 0, 0);
   String toWrite=dataPoint.toCompactNotification();
   Serial.println(toWrite); 
   firstFreeAdress+=writeDataPoint((uint32_t)firstFreeAdress, toWrite);
@@ -169,10 +157,10 @@ void writeConfigs(){
 //#########################  RESET  #########################
 
 void resetMemory(){
-  Serial.println("erase begin");
+  Serial.println("reset begin");
   delay(1000);
   flash.eraseChip();
-  Serial.println("erase done");
+  Serial.println("reset done");
 }
 
 //#########################  OTHER  #########################
@@ -214,16 +202,44 @@ void blinkError(int errorNumber){
   }
 }
 
-//#########################  MQ-2  #########################
+//#########################  COMMAND LINE  #########################
 
-void calibration(){
-  mq2.RL(RL_Value); // resistance load setting
-  mq2.Ro(Ro_Value); // reverse osmosis setting
-  mq2.Volt(Voltage_Value); // voltage sensor setting
-  mq2.BitADC(bitADC_Value); // development board adc resolution setting
-  mq2.mCurve(x1_Value, x2_Value, y1_Value, y2_Value); // mCurve setting
-  mq2.bCurve(x_Value, y_Value); // bCurve setting
-  mq2.getCalibrationData(); // get data calibration
+int commandElaboration(){
+  digitalWrite(RED_LED, HIGH);
+  digitalWrite(GREEN_LED, HIGH);
+  Serial.println("command line...");
+
+  for(int out=0; out==0;){
+    if(Serial.available()){
+      String data=Serial.readString();
+      data.trim();
+      int spaceIndex = data.indexOf(" ");
+      String command = data.substring(0, spaceIndex);
+      //Serial.println(command);
+      if(command=="help"){
+        Serial.println("commands:");
+        Serial.println("  reset-memory            - reset configs and data from memory");
+        Serial.println("  get-configs             - get configs from memory");
+        Serial.println("  print-data              - print data from memory");
+        Serial.println("  exit                    - exit from command line mode");
+      }
+      else if(command=="reset-memory"){
+        resetMemory();
+      }
+      else if(command=="get-configs"){
+        Serial.println(configs.toJSON());
+      }
+      else if(command=="print-data"){
+        printData();
+      }
+      else if(command=="exit"){
+        Serial.println("exit from command line...");
+        return 0;
+      }
+      else{
+        Serial.println(command+" it is not a command");
+      }
+      Serial.println("");
+    }
+  }  
 }
-
-
